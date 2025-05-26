@@ -4,7 +4,7 @@ import requests
 
 app = Flask(__name__)
 
-# Your credentials
+# Airtable and API configuration
 AIRTABLE_BASE_ID = "app9VwN9k00nPmpNC"
 AIRTABLE_TABLE_NAME = "Reels"
 AIRTABLE_API_KEY = "patCCJQPkpHn8HURJ.ab0c036429d219b5deb8b30ca3c5619c843a1cbb59d199c88ede37139a448182"
@@ -15,13 +15,19 @@ RAPIDAPI_HOST = "instagram-scrapper-posts-reels-stories-downloader.p.rapidapi.co
 def run_job():
     print("🚀 Starting sync job...")
 
+    # Trigger source
+    if request.method == "GET":
+        print("🌐 Triggered via GET — running sync job")
+    elif request.method == "POST":
+        print("📬 Triggered via POST — running sync job")
+
     airtable_url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE_NAME}"
     headers_airtable = {
         "Authorization": f"Bearer {AIRTABLE_API_KEY}",
         "Content-Type": "application/json"
     }
 
-    # 1. Fetch existing Reel Links (to avoid duplicates)
+    # Get all existing Reel Links (to avoid duplicates)
     existing_links = set()
     offset = None
     while True:
@@ -36,7 +42,7 @@ def run_job():
         if not offset:
             break
 
-    # 2. Fetch usernames from Airtable
+    # Get all usernames from Airtable
     res = requests.get(airtable_url, headers=headers_airtable)
     records = res.json().get("records", [])
     usernames = [r["fields"]["Username"] for r in records if "Username" in r["fields"]]
@@ -44,6 +50,7 @@ def run_job():
     for username in usernames:
         print(f"🔍 Processing: {username}")
 
+        # Get user_id
         user_id_res = requests.get(
             f"https://{RAPIDAPI_HOST}/user_id_by_username?username={username}",
             headers={
@@ -56,6 +63,7 @@ def run_job():
             print(f"❌ No user_id found for {username}")
             continue
 
+        # Get reels
         reels_res = requests.get(
             f"https://{RAPIDAPI_HOST}/reels?user_id={user_id}&include_feed_video=true",
             headers={
@@ -72,7 +80,7 @@ def run_job():
                 break
             link = reel.get("video_url", "")
             if not link or link in existing_links:
-                continue  # Skip duplicates
+                continue  # skip duplicates
 
             data = {
                 "fields": {
