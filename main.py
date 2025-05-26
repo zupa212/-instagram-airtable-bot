@@ -5,7 +5,7 @@ import requests
 app = Flask(__name__)
 
 AIRTABLE_BASE_ID = "app9VwN9k00nPmpNC"
-AIRTABLE_TABLE_NAME = "Reels"
+AIRTABLE_TABLE_NAME = "tblp5E0XBJDGPEEYt"
 AIRTABLE_API_KEY = "patCCJQPkpHn8HURJ.ab0c036429d219b5deb8b30ca3c5619c843a1cbb59d199c88ede37139a448182"
 RAPIDAPI_KEY = "d2e8898bfemsh86306d337b38bcap193d1djsnbfe332449d9a"
 RAPIDAPI_HOST = "instagram-scrapper-posts-reels-stories-downloader.p.rapidapi.com"
