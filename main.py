@@ -11,7 +11,7 @@ AIRTABLE_API_KEY = "patCCJQPkpHn8HURJ.ab0c036429d219b5deb8b30ca3c5619c843a1cbb59
 RAPIDAPI_KEY = "d2e8898bfemsh86306d337b38bcap193d1djsnbfe332449d9a"
 RAPIDAPI_HOST = "instagram-scrapper-posts-reels-stories-downloader.p.rapidapi.com"
 
-@app.route("/", methods=["POST"])
+@app.route("/", methods=["GET", "POST"])
 def run_job():
     print("🚀 Starting sync job...")
 
