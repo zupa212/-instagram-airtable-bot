@@ -1,7 +1,7 @@
 
 services:
   - type: web
-    name: instagram-airtable-bot-debug
+    name: instagram-airtable-bot-rapidapi
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py

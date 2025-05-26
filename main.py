@@ -4,107 +4,79 @@ import requests
 
 app = Flask(__name__)
 
+# Airtable config
 AIRTABLE_BASE_ID = "app9VwN9k00nPmpNC"
 AIRTABLE_TABLE_NAME = "tblp5E0XBJDGPEEYt"
 AIRTABLE_API_KEY = "patCCJQPkpHn8HURJ.ab0c036429d219b5deb8b30ca3c5619c843a1cbb59d199c88ede37139a448182"
+
+# RapidAPI config
 RAPIDAPI_KEY = "d2e8898bfemsh86306d337b38bcap193d1djsnbfe332449d9a"
-RAPIDAPI_HOST = "instagram-scrapper-posts-reels-stories-downloader.p.rapidapi.com"
+RAPIDAPI_HOST = "instagram-premium-api-2023.p.rapidapi.com"
 
-@app.route("/", methods=["GET", "POST"])
-def run_job():
-    print("🚀 Starting sync job...")
+@app.route("/", methods=["GET"])
+def sync_data():
+    print("🚀 Starting sync job")
 
-    try:
-        airtable_url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE_NAME}"
-        headers_airtable = {
-            "Authorization": f"Bearer {AIRTABLE_API_KEY}",
-            "Content-Type": "application/json"
-        }
+    airtable_url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE_NAME}"
+    headers_airtable = {
+        "Authorization": f"Bearer {AIRTABLE_API_KEY}",
+        "Content-Type": "application/json"
+    }
 
-        # Check Airtable connection
-        res = requests.get(airtable_url, headers=headers_airtable)
-        print(f"🔁 Airtable fetch status: {res.status_code}")
-        print(f"📄 Airtable response preview: {res.text[:500]}")
-        if res.status_code != 200:
-            return f"Airtable error: {res.text}", 500
+    res = requests.get(airtable_url, headers=headers_airtable)
+    records = res.json().get("records", [])
+    usernames = [r["fields"]["Username"] for r in records if "Username" in r["fields"]]
 
-        records = res.json().get("records", [])
-        usernames = [r["fields"]["Username"] for r in records if "Username" in r["fields"]]
-        print(f"📋 Found {len(usernames)} usernames: {usernames}")
+    for username in usernames:
+        print(f"🔍 Fetching user: {username}")
+        try:
+            user_res = requests.get(
+                f"https://{RAPIDAPI_HOST}/v1/user/by/username?username={username}",
+                headers={
+                    "x-rapidapi-key": RAPIDAPI_KEY,
+                    "x-rapidapi-host": RAPIDAPI_HOST
+                }
+            )
+            user_id = user_res.json().get("user", {}).get("pk_id")
+            if not user_id:
+                print(f"❌ No user ID found for {username}")
+                continue
 
-        existing_links = set()
-        offset = None
-        while True:
-            params = {"offset": offset} if offset else {}
-            link_res = requests.get(airtable_url, headers=headers_airtable, params=params)
-            link_data = link_res.json()
-            for record in link_data.get("records", []):
-                link = record.get("fields", {}).get("Reel Link")
-                if link:
-                    existing_links.add(link)
-            offset = link_data.get("offset")
-            if not offset:
-                break
+            media_res = requests.get(
+                f"https://{RAPIDAPI_HOST}/v2/user/medias?user_id={user_id}&count=50",
+                headers={
+                    "x-rapidapi-key": RAPIDAPI_KEY,
+                    "x-rapidapi-host": RAPIDAPI_HOST
+                }
+            )
+            medias = media_res.json().get("data", [])
+            print(f"📽️ Found {len(medias)} media items")
 
-        for username in usernames:
-            print(f"🔍 Processing: {username}")
-            try:
-                user_id_res = requests.get(
-                    f"https://{RAPIDAPI_HOST}/user_id_by_username?username={username}",
-                    headers={
-                        "x-rapidapi-key": RAPIDAPI_KEY,
-                        "x-rapidapi-host": RAPIDAPI_HOST
-                    }
-                )
-                print(f"🆔 User lookup status: {user_id_res.status_code}")
-                print(f"🆔 User lookup response: {user_id_res.text[:500]}")
-                user_id = user_id_res.json().get("user_id")
-                if not user_id:
-                    print(f"❌ No user_id found for {username}")
+            for media in medias:
+                if media.get("media_type") != "video":
+                    continue
+                video_url = media.get("video_url")
+                if not video_url:
                     continue
 
-                reels_res = requests.get(
-                    f"https://{RAPIDAPI_HOST}/reels?user_id={user_id}&include_feed_video=true",
-                    headers={
-                        "x-rapidapi-key": RAPIDAPI_KEY,
-                        "x-rapidapi-host": RAPIDAPI_HOST
+                data = {
+                    "fields": {
+                        "Username": username,
+                        "Caption": media.get("caption", ""),
+                        "Reel Link": video_url,
+                        "Thumbnail": media.get("thumbnail_url", ""),
+                        "Views": media.get("view_count", 0)
                     }
-                )
-                print(f"📽️ Reels fetch status: {reels_res.status_code}")
-                reels = reels_res.json().get("data", [])
-                print(f"📽️ Found {len(reels)} reels. Saving up to 50 new...")
+                }
+                post = requests.post(airtable_url, headers=headers_airtable, json=data)
+                if post.status_code == 200:
+                    print(f"✅ Added: {video_url}")
+                else:
+                    print(f"⚠️ Failed to add: {video_url} — {post.text}")
+        except Exception as e:
+            print(f"❌ Error for {username}: {e}")
 
-                new_count = 0
-                for reel in reels:
-                    if new_count >= 50:
-                        break
-                    link = reel.get("video_url", "")
-                    if not link or link in existing_links:
-                        continue
-                    data = {
-                        "fields": {
-                            "Username": username,
-                            "Caption": reel.get("caption", ""),
-                            "Reel Link": link,
-                            "Thumbnail": reel.get("thumbnail_url", ""),
-                            "Views": reel.get("play_count", 0)
-                        }
-                    }
-                    post_res = requests.post(airtable_url, headers=headers_airtable, json=data)
-                    print(f"📥 Airtable add status: {post_res.status_code}")
-                    if post_res.status_code == 200:
-                        print(f"✅ Added: {link}")
-                        new_count += 1
-                    else:
-                        print(f"⚠️ Failed to add: {link}, Response: {post_res.text}")
-            except Exception as e:
-                print(f"❌ Error processing user {username}: {e}")
-
-    except Exception as e:
-        print(f"💥 Fatal error: {e}")
-        return f"Error: {e}", 500
-
-    return "✅ Done (Debug Mode)", 200
+    return "✅ Sync complete", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
